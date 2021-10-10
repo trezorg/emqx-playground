@@ -1,0 +1,100 @@
+version: '3'
+
+services:
+
+  redis:
+    image: redis:latest
+    hostname: redis
+    restart: "always"
+    volumes:
+      - redis:/data
+    ports:
+      - 6379:6379
+    networks:
+      emqx-bridge:
+        aliases:
+        - redis.emqx.io
+
+  emqx1:
+    image: emqx/emqx:4.3.8
+    hostname: node1.emqx.io
+    environment:
+    - "DEBUG=0"
+    - "EMQX_NAME=emqx"
+    - "EMQX_HOST=node1.emqx.io"
+    - "EMQX_CLUSTER__DISCOVERY=static"
+    - "EMQX_CLUSTER__STATIC__SEEDS=emqx@node1.emqx.io,emqx@node2.emqx.io"
+    - "EMQX_LOADED_MODULES=emqx_mod_delayed,emqx_mod_rewrite,emqx_mod_presence"
+    - "EMQX_LOADED_PLUGINS=emqx_recon,emqx_retainer,emqx_management,emqx_rule_engine,emqx_dashboard,emqx_auth_jwt"
+    - "EMQX_BACKEND__REDIS__POOL1__SERVER=redis.emqx.io:6379"
+    - "EMQX_LOG__TO=console"
+    - "EMQX_LOG__LEVEL=warning"
+    - "EMQX_ALLOW_ANONYMOUS=false"
+    - "EMQX_ACL_NOMATCH=deny"
+    - "EMQX_ACL_DENY_ACTION=disconnect"
+    - "EMQX_AUTH__JWT__FROM=password"
+    - "EMQX_AUTH__JWT__PUBKEY=/opt/emqx/public.pem"
+    - "EMQX_AUTH__JWT__VERIFY_CLAIMS=on"
+    - "EMQX_AUTH__JWT__VERIFY_CLAIMS__USERNAME=%u"
+    volumes:
+      - vol-emqx-data1:/opt/emqx/data
+      - ./keys/public.pem:/opt/emqx/public.pem
+      - ./acl.conf:/opt/emqx/etc/acl.conf
+    ports:
+      - 18083:18083
+      - 1883:1883
+      - 8081:8081
+    depends_on:
+      - redis
+    networks:
+      emqx-bridge:
+        aliases:
+        - node1.emqx.io
+
+  emqx2:
+    image: emqx/emqx:4.3.8
+    hostname: node2.emqx.io
+    environment:
+    - "DEBUG=0"
+    - "EMQX_NAME=emqx"
+    - "EMQX_HOST=node2.emqx.io"
+    - "EMQX_CLUSTER__DISCOVERY=static"
+    - "EMQX_CLUSTER__STATIC__SEEDS=emqx@node1.emqx.io,emqx@node2.emqx.io"
+    - "EMQX_LOADED_MODULES=emqx_mod_delayed,emqx_mod_rewrite,emqx_mod_presence"
+    - "EMQX_LOADED_PLUGINS=emqx_recon,emqx_retainer,emqx_management,emqx_rule_engine,emqx_dashboard,emqx_auth_jwt"
+    - "EMQX_BACKEND__REDIS__POOL1__SERVER=redis.emqx.io:6379"
+    - "EMQX_LOG__TO=console"
+    - "EMQX_LOG__LEVEL=warning"
+    - "EMQX_ALLOW_ANONYMOUS=false"
+    - "EMQX_ACL_NOMATCH=deny"
+    - "EMQX_ACL_DENY_ACTION=disconnect"
+    - "EMQX_AUTH__JWT__FROM=password"
+    - "EMQX_AUTH__JWT__PUBKEY=/opt/emqx/public.pem"
+    - "EMQX_AUTH__JWT__VERIFY_CLAIMS=on"
+    - "EMQX_AUTH__JWT__VERIFY_CLAIMS__USERNAME=%u"
+    volumes:
+      - vol-emqx-data2:/opt/emqx/data
+      - ./keys/public.pem:/opt/emqx/public.pem
+      - ./acl.conf:/opt/emqx/etc/acl.conf
+    ports:
+      - 18084:18083
+      - 1884:1883
+      - 8082:8081
+    depends_on:
+      - redis
+    networks:
+      emqx-bridge:
+        aliases:
+        - node2.emqx.io
+
+volumes:
+  vol-emqx-data1:
+    name: foo-emqx-data1
+  vol-emqx-data2:
+    name: foo-emqx-data2
+  redis:
+    name: redis
+
+networks:
+  emqx-bridge:
+    driver: bridge
