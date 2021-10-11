@@ -26,6 +26,7 @@ logger = logging.getLogger('mqtt')
 
 
 STATE_TOPIC = 'sensors/{username}/state'
+STATE_SHARED_SUBSCRIPTION = '$share/{group}/sensors/+/noise'
 NOISE_TOPIC = 'sensors/{username}/noise'
 PRIVATE_KEY_FILE = 'keys/private.pem'
 DEFAULT_ORGANIZATION = 'sensors'
@@ -65,6 +66,12 @@ def prepare_args():
         "-u",
         "--username",
         help="username",
+        type=str,
+    )
+    parser.add_argument(
+        "-i",
+        "--client-id",
+        help="client id",
         type=str,
     )
     parser.add_argument(
@@ -114,6 +121,23 @@ def prepare_args():
         action="store_true"
     )
     parser.add_argument(
+        "--no-publish",
+        help="Do not send publish messages",
+        action="store_true"
+    )
+    parser.add_argument(
+        "-s",
+        "--shared",
+        help="MQTT 5 shared subscription",
+        action="store_true"
+    )
+    parser.add_argument(
+        "-g",
+        "--group",
+        help="MQTT 5 shared subscription group",
+        type=str
+    )
+    parser.add_argument(
         "--clean-start",
         help="MQTT 5 clean start flag",
         action="store_true"
@@ -141,14 +165,25 @@ def prepare_args():
 def check_args(args: argparse.Namespace):
     if not args.username:
         raise ValueError("username must be specified")
+    if not args.client_id:
+        args.client_id = args.username
     if not args.token:
         args.token = generate_token(args)
+    if not args.group:
+        args.group = args.username
     parameters = vars(args)
-    topics = [STATE_TOPIC.format(**parameters), NOISE_TOPIC.format(**parameters)]
+    print(parameters['username'], parameters['group'])
+    if args.shared:
+        sub_topics = [STATE_SHARED_SUBSCRIPTION.format(**parameters)]
+    else:
+        sub_topics = [
+            STATE_TOPIC.format(**parameters),
+            NOISE_TOPIC.format(**parameters)
+        ]
     if not args.subscribe_topic:
-        args.subscribe_topic = topics
+        args.subscribe_topic = sub_topics
     if not args.publish_topic:
-        args.publish_topic = topics[1:]
+        args.publish_topic = [NOISE_TOPIC.format(**parameters)]
 
 
 def on_connect(args, client: MQTTClient, flags, rc, properties):
@@ -196,7 +231,7 @@ async def start(args):
     asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 
     client = MQTTClient(
-        args.username,
+        args.client_id,
         clean_session=args.clean_start,
         session_expiry_interval=args.session_expiry_interval
     )
@@ -214,7 +249,8 @@ async def start(args):
 
     client.set_auth_credentials(username=args.username, password=args.token)
     await client.connect(host=args.host, port=args.port)
-    asyncio.create_task(publish(args=args, client=client, event=event))
+    if not args.no_publish:
+        asyncio.create_task(publish(args=args, client=client, event=event))
     await event.wait()
     await client.disconnect()
 
