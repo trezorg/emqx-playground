@@ -26,7 +26,7 @@ logger = logging.getLogger('mqtt')
 
 
 STATE_TOPIC = 'sensors/{username}/state'
-STATE_SHARED_SUBSCRIPTION = '$share/{group}/sensors/+/noise'
+STATE_SHARED_SUBSCRIPTION = '$share/{group}/sensors/+/state'
 NOISE_TOPIC = 'sensors/{username}/noise'
 PRIVATE_KEY_FILE = 'keys/private.pem'
 DEFAULT_ORGANIZATION = 'sensors'
@@ -178,7 +178,6 @@ def check_args(args: argparse.Namespace):
     else:
         sub_topics = [
             STATE_TOPIC.format(**parameters),
-            NOISE_TOPIC.format(**parameters)
         ]
     if not args.subscribe_topic:
         args.subscribe_topic = sub_topics
@@ -192,16 +191,16 @@ def on_connect(args, client: MQTTClient, flags, rc, properties):
         client.subscribe(topic, qos=args.qos, no_local=args.no_local, content_type='json')
 
 
-def on_message(args, client, topic, payload, qos, properties):
-    logger.info('Get message: Topic: %s, payload: %s', topic, payload)
+def on_message(args, client: MQTTClient, topic, payload, qos, properties):
+    logger.info('Get message: Client ID: %s, Topic: %s, payload: %s', client._client_id, topic, payload)
 
 
-def on_disconnect(args, client, packet, exc=None):
+def on_disconnect(args, client: MQTTClient, packet, exc=None):
     logger.info('Disconnected. packet: %s. Exception: %s', packet, exc)
 
 
-def on_subscribe(args: argparse.Namespace, client, mid, qos, properties):
-    logger.info('Subscribed. Mid: %s. QOS: %s. Properties: %s', mid, qos, properties)
+def on_subscribe(args: argparse.Namespace, client: MQTTClient, mid, qos, properties):
+    logger.info('Subscribed. Client ID: %s. Mid: %s. QOS: %s. Properties: %s', client._client_id, mid, qos, properties)
 
 
 def prepare_message(args: argparse.Namespace):

@@ -44,13 +44,13 @@ Install and test
     username=sensorsadmin
     client_id1=1
     client_id2=2
-    python mqtt.py -u "${username}" -i "${client_id1}" -s --no-publish -q 2
+    python mqtt.py -u "${username}" -i "${client_id1}" -s --no-publish -q 2 && \
     python mqtt.py -u "${username}" -i "${client_id2}" -s --no-publish -q 2
 
 ###### Publish
     username=sensorsadmin
     recipient_username=1
-    topic="sensors/${recipient_username}/noise"
+    topic="sensors/${recipient_username}/state"
     token=$(python jwt_token.py -k keys/private.pem -u "${username}" -o 1 -r admin -t "$((3600*24*30))" 2>/dev/null)
     uri="mqtt://${username}:${token}@127.0.0.1/${topic}"
     count=0
