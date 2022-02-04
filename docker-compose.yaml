@@ -16,7 +16,7 @@ services:
         - redis.emqx.io
 
   emqx1:
-    image: emqx/emqx:4.3.8
+    image: emqx/emqx:4.3.11
     hostname: node1.emqx.io
     environment:
     - "DEBUG=0"
@@ -54,7 +54,7 @@ services:
         - node1.emqx.io
 
   emqx2:
-    image: emqx/emqx:4.3.8
+    image: emqx/emqx:4.3.11
     hostname: node2.emqx.io
     environment:
     - "DEBUG=0"
