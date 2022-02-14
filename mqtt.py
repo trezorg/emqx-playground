@@ -9,6 +9,7 @@ import asyncio
 from datetime import datetime
 from functools import partial
 import logging
+import random
 import uuid
 import signal
 
@@ -31,6 +32,7 @@ NOISE_TOPIC = 'sensors/{username}/noise'
 PRIVATE_KEY_FILE = 'keys/private.pem'
 DEFAULT_ORGANIZATION = 'sensors'
 DEFAULT_TTL = 3600*24*30
+MESSAGE_VERSION = '0.0.1'
 
 
 def prepare_args():
@@ -149,6 +151,12 @@ def prepare_args():
         default=1
     )
     parser.add_argument(
+        "--version",
+        help="message version",
+        type=str,
+        default=MESSAGE_VERSION
+    )
+    parser.add_argument(
         "--session-expiry-interval",
         help=(
             "Session expiry interval in seconds. "
@@ -207,7 +215,10 @@ def prepare_message(args: argparse.Namespace):
     return {
         'message_id': uuid.uuid4().hex,
         'username': args.username,
+        'org': args.organization,
         'time': datetime.now().isoformat(),
+        'version': args.version,
+        'level': round(random.uniform(0, 1), 2),
     }
 
 
