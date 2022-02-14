@@ -59,3 +59,10 @@ Install and test
         mosquitto_pub -V mqttv5 -L "${uri}" -i "${username}_pub" -q 2 -d -c -m "test${count}"
         sleep 1
     done
+
+
+Install kafka
+=============================
+
+    helm repo add strimzi https://strimzi.io/charts/
+    helm install strimzi/strimzi-kafka-operator
