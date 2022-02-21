@@ -4,21 +4,26 @@ EQMX test platform
 Install and test
 --------------------------------------------------
 
-##### Generate public/private keys
+Generate public/private keys
+--------------------------------------------------
 
     bash keygen.sh
 
-##### Start eqmx cluster
+Start eqmx cluster
+--------------------------------------------------
 
     docker-compose up -d --force-recreate --remove-orphans -V
 
-##### Install python requirements
+Install python requirements
+--------------------------------------------------
+
 
 **Required python3.6+**
 
     python -m pip install -U --user -r requirements.txt
 
-##### Generate token and publish/subscribe with mosquitto client
+Generate token and publish/subscribe with mosquitto client
+--------------------------------------------------
 
     username=sensorsadmin
     recipient_username=1
@@ -28,18 +33,22 @@ Install and test
     mosquitto_pub -V mqttv5 -L "${uri}" -i "${username}_pub" -q 2 -d -c -m "test$(date)"
     mosquitto_sub -V mqttv5 -L "${uri}" -i "${username}_sub" -q 2 -d -c -C 1
 
-##### Start python publisher, subscriber
+Start python publisher, subscriber
+--------------------------------------------------
 
     python mqtt.py -h
 
-###### Using example
+Using example
+--------------------------------------------------
 
     username=1
     python mqtt.py -u "${username}" --timeout 10 -q 2
 
-##### Shared subscription
+Shared subscription
+--------------------------------------------------
 
-###### Subscribe
+Subscribe
+--------------------------------------------------
 
     username=sensorsadmin
     client_id1=1
@@ -47,7 +56,9 @@ Install and test
     python mqtt.py -u "${username}" -i "${client_id1}" -s --no-publish -q 2 && \
     python mqtt.py -u "${username}" -i "${client_id2}" -s --no-publish -q 2
 
-###### Publish
+Publish
+--------------------------------------------------
+
     username=sensorsadmin
     recipient_username=1
     topic="sensors/${recipient_username}/state"
@@ -59,10 +70,3 @@ Install and test
         mosquitto_pub -V mqttv5 -L "${uri}" -i "${username}_pub" -q 2 -d -c -m "test${count}"
         sleep 1
     done
-
-
-Install kafka
-=============================
-
-    helm repo add strimzi https://strimzi.io/charts/
-    helm install strimzi/strimzi-kafka-operator

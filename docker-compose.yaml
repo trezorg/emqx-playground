@@ -2,19 +2,6 @@ version: '3'
 
 services:
 
-  redis:
-    image: redis:latest
-    hostname: redis
-    restart: "always"
-    volumes:
-      - redis:/data
-    ports:
-      - 6379:6379
-    networks:
-      emqx-bridge:
-        aliases:
-        - redis.emqx.io
-
   emqx1:
     image: emqx/emqx:4.3.11
     hostname: node1.emqx.io
@@ -46,8 +33,6 @@ services:
       - 18083:18083
       - 1883:1883
       - 8081:8081
-    depends_on:
-      - redis
     networks:
       emqx-bridge:
         aliases:
@@ -84,8 +69,6 @@ services:
       - 18084:18083
       - 1884:1883
       - 8082:8081
-    depends_on:
-      - redis
     networks:
       emqx-bridge:
         aliases:
@@ -93,11 +76,9 @@ services:
 
 volumes:
   vol-emqx-data1:
-    name: foo-emqx-data1
+    name: emqx-data1
   vol-emqx-data2:
-    name: foo-emqx-data2
-  redis:
-    name: redis
+    name: emqx-data2
 
 networks:
   emqx-bridge:
