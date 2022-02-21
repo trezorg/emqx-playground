@@ -74,6 +74,18 @@ services:
         aliases:
         - node2.emqx.io
 
+  mqtt:
+    image: python:3.9.10-slim
+    hostname: python.emqx.io
+    command:
+    volumes:
+      - ./keys/private.pem:/keys/private.pem
+    networks:
+      emqx-bridge:
+        aliases:
+        - mqtt.emqx.io
+
+
 volumes:
   vol-emqx-data1:
     name: emqx-data1
