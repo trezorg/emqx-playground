@@ -6,21 +6,17 @@
 
 import argparse
 import asyncio
-from datetime import datetime
-from functools import partial
 import logging
 import random
-import uuid
 import signal
+import uuid
+from datetime import datetime
+from functools import partial
 
 import uvloop
 from gmqtt import Client as MQTTClient
 
-from jwt_token import (
-    DEFAULT_ROLE,
-    generate_token,
-)
-
+from jwt_token import DEFAULT_ROLE, generate_token
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('mqtt')
@@ -123,8 +119,13 @@ def prepare_args():
         action="store_true"
     )
     parser.add_argument(
-        "--no-publish",
-        help="Do not send publish messages",
+        "--auto-publish",
+        help="Send publish messages in automatic mode with some period",
+        action="store_true"
+    )
+    parser.add_argument(
+        "--publish",
+        help="Send messages and exit",
         action="store_true"
     )
     parser.add_argument(
@@ -180,13 +181,10 @@ def check_args(args: argparse.Namespace):
     if not args.group:
         args.group = args.username
     parameters = vars(args)
-    print(parameters['username'], parameters['group'])
     if args.shared:
         sub_topics = [STATE_SHARED_SUBSCRIPTION.format(**parameters)]
     else:
-        sub_topics = [
-            STATE_TOPIC.format(**parameters),
-        ]
+        sub_topics = [STATE_TOPIC.format(**parameters)]
     if not args.subscribe_topic:
         args.subscribe_topic = sub_topics
     if not args.publish_topic:
@@ -216,7 +214,7 @@ def prepare_message(args: argparse.Namespace):
         'message_id': uuid.uuid4().hex,
         'username': args.username,
         'org': args.organization,
-        'time': datetime.now().isoformat(),
+        'time': datetime.utcnow().timestamp(),
         'version': args.version,
         'level': round(random.uniform(0, 1), 2),
     }
@@ -226,7 +224,7 @@ def ask_exit(event, *args):
     event.set()
 
 
-async def publish(args: argparse.Namespace, client: MQTTClient, event: asyncio.Event):
+async def auto_publish(args: argparse.Namespace, client: MQTTClient, event: asyncio.Event):
     while not event.is_set():
         try:
             await asyncio.wait_for(event.wait(), timeout=args.timeout)
@@ -237,14 +235,18 @@ async def publish(args: argparse.Namespace, client: MQTTClient, event: asyncio.E
             client.publish(topic, payload=prepare_message(args), qos=args.qos, content_type='json')
 
 
-async def start(args):
+def prepare_client(args) -> MQTTClient:
     asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
-
     client = MQTTClient(
         args.client_id,
         clean_session=args.clean_start,
         session_expiry_interval=args.session_expiry_interval
     )
+    return client
+
+
+async def subscribe(args: argparse.Namespace):
+    client = prepare_client(args)
     client.on_connect = partial(on_connect, args)
     client.on_message = partial(on_message, args)
     client.on_disconnect = partial(on_disconnect, args)
@@ -259,14 +261,22 @@ async def start(args):
 
     client.set_auth_credentials(username=args.username, password=args.token)
     await client.connect(host=args.host, port=args.port)
-    if not args.no_publish:
-        asyncio.create_task(publish(args=args, client=client, event=event))
+    if not args.no_auto_publish:
+        asyncio.create_task(auto_publish(args=args, client=client, event=event))
     await event.wait()
     await client.disconnect()
+
+
+async def publish(args: argparse.Namespace):
+    client = prepare_client(args)
+    for topic in args.publish_topic:
+        logger.info('Publish to topic: %s', topic)
+        client.publish(topic, payload=prepare_message(args), qos=args.qos, content_type='json')
 
 
 if __name__ == "__main__":
     params = prepare_args()
     check_args(params)
     logger.info('Args: %s', vars(params))
-    asyncio.run(start(params))
+    coro = subscribe if not params.publish else publish
+    asyncio.run(coro(params))
