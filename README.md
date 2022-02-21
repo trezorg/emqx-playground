@@ -47,14 +47,11 @@ Using example
 Shared subscription
 --------------------------------------------------
 
-Subscribe
---------------------------------------------------
-
     username=sensorsadmin
     client_id1=1
     client_id2=2
-    python mqtt.py -u "${username}" -i "${client_id1}" -s --no-publish -q 2 && \
-    python mqtt.py -u "${username}" -i "${client_id2}" -s --no-publish -q 2
+    python mqtt.py -u "${username}" -i "${client_id1}" --shared --subscribe -q 2 && \
+    python mqtt.py -u "${username}" -i "${client_id2}" --shared --subscribe -q 2
 
 Publish
 --------------------------------------------------
@@ -70,3 +67,11 @@ Publish
         mosquitto_pub -V mqttv5 -L "${uri}" -i "${username}_pub" -q 2 -d -c -m "test${count}"
         sleep 1
     done
+
+Docker compose mqtt script
+----------------------------------------------------
+
+    docker-compose exec mqtt python mqtt.py --publish --username test --private-key private.pem --client-id 3 --qos 1 --host emqx1
+
+    docker-compose exec mqtt python mqtt.py --subscribe --username sensorsadmin --client-id 1 --private-key private.pem --no-local --group kafka --shared --qos 1 --host emqx1
+    docker-compose exec mqtt python mqtt.py --subscribe --username sensorsadmin --client-id 2 --private-key private.pem --no-local --group kafka --shared --qos 1 --host emqx2

@@ -3,10 +3,10 @@ version: '3'
 services:
 
   emqx1:
-    image: emqx/emqx:4.3.11
+    image: emqx/emqx:4.4.1
     hostname: node1.emqx.io
     environment:
-    - "DEBUG=0"
+    - "DEBUG=1"
     - "EMQX_NAME=emqx"
     - "EMQX_HOST=node1.emqx.io"
     - "EMQX_CLUSTER__DISCOVERY=static"
@@ -25,6 +25,8 @@ services:
     - "EMQX_AUTH__JWT__PUBKEY=/opt/emqx/public.pem"
     - "EMQX_AUTH__JWT__VERIFY_CLAIMS=on"
     - "EMQX_AUTH__JWT__VERIFY_CLAIMS__USERNAME=%u"
+    tmpfs:
+      - /tmp
     volumes:
       - vol-emqx-data1:/opt/emqx/data
       - ./keys/public.pem:/opt/emqx/public.pem
@@ -39,10 +41,10 @@ services:
         - node1.emqx.io
 
   emqx2:
-    image: emqx/emqx:4.3.11
+    image: emqx/emqx:4.4.1
     hostname: node2.emqx.io
     environment:
-    - "DEBUG=0"
+    - "DEBUG=1"
     - "EMQX_NAME=emqx"
     - "EMQX_HOST=node2.emqx.io"
     - "EMQX_CLUSTER__DISCOVERY=static"
@@ -61,6 +63,8 @@ services:
     - "EMQX_AUTH__JWT__PUBKEY=/opt/emqx/public.pem"
     - "EMQX_AUTH__JWT__VERIFY_CLAIMS=on"
     - "EMQX_AUTH__JWT__VERIFY_CLAIMS__USERNAME=%u"
+    tmpfs:
+      - /tmp
     volumes:
       - vol-emqx-data2:/opt/emqx/data
       - ./keys/public.pem:/opt/emqx/public.pem
@@ -75,11 +79,18 @@ services:
         - node2.emqx.io
 
   mqtt:
-    image: python:3.9.10-slim
-    hostname: python.emqx.io
+    build:
+      context: ./
+      dockerfile: ./Dockerfile
+    image: mqtt
+    hostname: mqtt.emqx.io
+    entrypoint: /bin/sh -c
     command:
+      - 'while true; do echo "Sleeping 5 seconds: $$(date)"; sleep 5; done'
+    tmpfs:
+      - /tmp
     volumes:
-      - ./keys/private.pem:/keys/private.pem
+      - ./keys/private.pem:/var/app/private.pem
     networks:
       emqx-bridge:
         aliases:
