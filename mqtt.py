@@ -14,7 +14,7 @@ from datetime import datetime
 from functools import partial
 
 import uvloop
-from gmqtt import Client as MQTTClient
+from gmqtt import Client as MQTTClient, Subscription
 
 from jwt_token import DEFAULT_ROLE, generate_token
 
@@ -22,9 +22,8 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('mqtt')
 
 
-STATE_TOPIC = 'sensors/{username}/state'
-STATE_SHARED_SUBSCRIPTION = '$share/{group}/sensors/+/state'
-NOISE_TOPIC = 'sensors/{username}/noise'
+NOISE_SHARED_SUBSCRIPTION = '$share/{group}/sensors/+/noise'
+NOISE_TOPIC = 'sensors/{recipient_username}/noise'
 PRIVATE_KEY_FILE = 'keys/private.pem'
 DEFAULT_ORGANIZATION = 'sensors'
 DEFAULT_TTL = 3600*24*30
@@ -33,6 +32,10 @@ MESSAGE_VERSION = '0.0.1'
 
 def prepare_args():
     parser = argparse.ArgumentParser()
+
+    subscribe_group = parser.add_argument_group('subscribe', 'sibscription parameters')
+    publish_group = parser.add_argument_group('publish', 'publishing parameters')
+
     parser.add_argument(
         "--host",
         help="MQTT host",
@@ -44,14 +47,6 @@ def prepare_args():
         "--port",
         help="MQTT port",
         default=1883,
-        type=int,
-    )
-    parser.add_argument(
-        "-q",
-        "--qos",
-        help="MQTT QOS",
-        default=2,
-        choices=[0, 1, 2],
         type=int,
     )
     parser.add_argument(
@@ -67,22 +62,21 @@ def prepare_args():
         type=str,
     )
     parser.add_argument(
+        "-ur",
+        "--recipient-username",
+        help="recipient username",
+        type=str,
+    )
+    parser.add_argument(
         "-i",
         "--client-id",
         help="client id",
         type=str,
     )
     parser.add_argument(
-        "-st",
-        "--subscribe-topic",
-        help="MQTT subscribe topic",
-        type=str,
-        nargs='+',
-    )
-    parser.add_argument(
-        "-pt",
-        "--publish-topic",
-        help="MQTT publish topic",
+        "-tp",
+        "--topic",
+        help="MQTT topic",
         type=str,
         nargs='+',
     )
@@ -114,42 +108,9 @@ def prepare_args():
         default=DEFAULT_TTL,
     )
     parser.add_argument(
-        "--no-local",
-        help="MQTT 5 NoLocal flag. Do not get published messages in same connection",
-        action="store_true"
-    )
-    parser.add_argument(
-        "--auto-publish",
-        help="Send publish messages in automatic mode with some period",
-        action="store_true"
-    )
-    parser.add_argument(
-        "--publish",
-        help="Send messages and exit",
-        action="store_true"
-    )
-    parser.add_argument(
-        "-s",
-        "--shared",
-        help="MQTT 5 shared subscription",
-        action="store_true"
-    )
-    parser.add_argument(
-        "-g",
-        "--group",
-        help="MQTT 5 shared subscription group",
-        type=str
-    )
-    parser.add_argument(
         "--clean-start",
         help="MQTT 5 clean start flag",
         action="store_true"
-    )
-    parser.add_argument(
-        "--timeout",
-        help="publish period",
-        type=float,
-        default=1
     )
     parser.add_argument(
         "--version",
@@ -167,6 +128,52 @@ def prepare_args():
         type=int,
         default=0xFFFFFFFF,
     )
+    parser.add_argument(
+        "-q",
+        "--qos",
+        help="MQTT QOS",
+        default=2,
+        choices=[0, 1, 2],
+        type=int,
+    )
+    publish_group.add_argument(
+        "--timeout",
+        help="publish period",
+        type=float,
+        default=1
+    )
+    publish_group.add_argument(
+        "--publish",
+        help="Publish message",
+        action="store_true"
+    )
+    publish_group.add_argument(
+        "--retain",
+        help="Retained message",
+        action="store_true"
+    )
+    subscribe_group.add_argument(
+        "--no-local",
+        help="MQTT 5 NoLocal flag. Do not get published messages in same connection",
+        action="store_true"
+    )
+    subscribe_group.add_argument(
+        "-s",
+        "--shared",
+        help="MQTT 5 shared subscription",
+        action="store_true"
+    )
+    subscribe_group.add_argument(
+        "-g",
+        "--group",
+        help="MQTT 5 shared subscription group",
+        type=str
+    )
+    subscribe_group.add_argument(
+        "--subscribe",
+        help="Subscribe on topics",
+        action="store_true"
+    )
     args = parser.parse_args()
     return args
 
@@ -176,29 +183,41 @@ def check_args(args: argparse.Namespace):
         raise ValueError("username must be specified")
     if not args.client_id:
         args.client_id = args.username
+    if not args.recipient_username:
+        args.recipient_username = args.username
     if not args.token:
         args.token = generate_token(args)
     if not args.group:
         args.group = args.username
     parameters = vars(args)
     if args.shared:
-        sub_topics = [STATE_SHARED_SUBSCRIPTION.format(**parameters)]
+        sub_topics = [NOISE_SHARED_SUBSCRIPTION.format(**parameters)]
     else:
-        sub_topics = [STATE_TOPIC.format(**parameters)]
-    if not args.subscribe_topic:
-        args.subscribe_topic = sub_topics
-    if not args.publish_topic:
-        args.publish_topic = [NOISE_TOPIC.format(**parameters)]
+        sub_topics = [NOISE_TOPIC.format(**parameters)]
+    if not args.subscribe and not args.publish:
+        raise ValueError("either --subscribe of --publish should be set")
+    if not args.topic:
+        if args.subscribe:
+            args.topic = sub_topics
+        if args.publish:
+            args.topic = [NOISE_TOPIC.format(**parameters)]
+
+
+def subscribe_topics(args: argparse.Namespace, client: MQTTClient):
+    subscriptions = [Subscription(topic, qos=args.qos) for topic in args.topic]
+    logger.info('Subscribing topics"%s"...', args.topic)
+    client.subscribe(subscription_or_topic=subscriptions, no_local=args.no_local, content_type='json')
+    logger.info('Subscribed topic "%s"', args.topic)
 
 
 def on_connect(args, client: MQTTClient, flags, rc, properties):
     logger.info('Connected: Flags: %s, RC: %s, properties: %s', flags, rc, properties)
-    for topic in args.subscribe_topic:
-        client.subscribe(topic, qos=args.qos, no_local=args.no_local, content_type='json')
+    if args.subscribe:
+        subscribe_topics(args, client)
 
 
 def on_message(args, client: MQTTClient, topic, payload, qos, properties):
-    logger.info('Get message: Client ID: %s, Topic: %s, payload: %s', client._client_id, topic, payload)
+    logger.info('Get message: Client ID: %s, Topic: %s, payload: %s, qos: %d, properties: %s', client._client_id, topic, payload, qos, properties)
 
 
 def on_disconnect(args, client: MQTTClient, packet, exc=None):
@@ -214,7 +233,7 @@ def prepare_message(args: argparse.Namespace):
         'message_id': uuid.uuid4().hex,
         'username': args.username,
         'org': args.organization,
-        'time': datetime.utcnow().timestamp(),
+        'time': round(1000 * datetime.utcnow().timestamp()),
         'version': args.version,
         'level': round(random.uniform(0, 1), 2),
     }
@@ -230,28 +249,33 @@ async def auto_publish(args: argparse.Namespace, client: MQTTClient, event: asyn
             await asyncio.wait_for(event.wait(), timeout=args.timeout)
         except asyncio.TimeoutError:
             pass
-        for topic in args.publish_topic:
-            logger.info('Publish to topic: %s', topic)
-            client.publish(topic, payload=prepare_message(args), qos=args.qos, content_type='json')
+        message = prepare_message(args)
+        for topic in args.topic:
+            logger.info('Publishing to topic: "%s"...', topic)
+            client.publish(topic, payload=message, qos=args.qos, retain=args.retain, content_type='json')
+            logger.info('Published to topic: "%s"', topic)
 
 
-def prepare_client(args) -> MQTTClient:
+async def prepare_client(args) -> MQTTClient:
     asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
     client = MQTTClient(
         args.client_id,
         clean_session=args.clean_start,
         session_expiry_interval=args.session_expiry_interval
     )
+    client.on_connect = partial(on_connect, args)
+    client.on_disconnect = partial(on_disconnect, args)
+    if args.subscribe:
+        client.on_subscribe = partial(on_subscribe, args)
+        client.on_message = partial(on_message, args)
+    client.set_auth_credentials(username=args.username, password=args.token)
+    logger.info('Connecting to %s:%s', args.host, args.port)
+    await client.connect(host=args.host, port=args.port)
     return client
 
 
 async def subscribe(args: argparse.Namespace):
-    client = prepare_client(args)
-    client.on_connect = partial(on_connect, args)
-    client.on_message = partial(on_message, args)
-    client.on_disconnect = partial(on_disconnect, args)
-    client.on_subscribe = partial(on_subscribe, args)
-
+    client = await prepare_client(args)
     event = asyncio.Event()
 
     loop = asyncio.get_event_loop()
@@ -259,19 +283,18 @@ async def subscribe(args: argparse.Namespace):
     loop.add_signal_handler(signal.SIGINT, func)
     loop.add_signal_handler(signal.SIGTERM, func)
 
-    client.set_auth_credentials(username=args.username, password=args.token)
-    await client.connect(host=args.host, port=args.port)
-    if not args.no_auto_publish:
-        asyncio.create_task(auto_publish(args=args, client=client, event=event))
+    # asyncio.create_task(auto_publish(args=args, client=client, event=event))
     await event.wait()
     await client.disconnect()
 
 
 async def publish(args: argparse.Namespace):
-    client = prepare_client(args)
-    for topic in args.publish_topic:
+    client = await prepare_client(args)
+    for topic in args.topic:
         logger.info('Publish to topic: %s', topic)
-        client.publish(topic, payload=prepare_message(args), qos=args.qos, content_type='json')
+        message = prepare_message(args)
+        client.publish(message_or_topic=topic, payload=message, qos=args.qos, retain=args.retain, content_type='json')
+        logger.info('Published to topic: %s', topic)
 
 
 if __name__ == "__main__":
