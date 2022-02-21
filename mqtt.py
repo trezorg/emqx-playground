@@ -152,6 +152,11 @@ def prepare_args():
         help="Retained message",
         action="store_true"
     )
+    publish_group.add_argument(
+        "--payload",
+        help="MQTT message payload",
+        type=str
+    )
     subscribe_group.add_argument(
         "--no-local",
         help="MQTT 5 NoLocal flag. Do not get published messages in same connection",
@@ -216,8 +221,16 @@ def on_connect(args, client: MQTTClient, flags, rc, properties):
         subscribe_topics(args, client)
 
 
-def on_message(args, client: MQTTClient, topic, payload, qos, properties):
-    logger.info('Get message: Client ID: %s, Topic: %s, payload: %s, qos: %d, properties: %s', client._client_id, topic, payload, qos, properties)
+async def on_message(args, client: MQTTClient, topic, payload, qos, properties):
+    logger.info(
+        'Get message: Client ID: %s, Topic: %s, payload: %s, qos: %d, properties: %s',
+        client._client_id,
+        topic,
+        payload,
+        qos,
+        properties,
+    )
+    return 0
 
 
 def on_disconnect(args, client: MQTTClient, packet, exc=None):
@@ -249,7 +262,7 @@ async def auto_publish(args: argparse.Namespace, client: MQTTClient, event: asyn
             await asyncio.wait_for(event.wait(), timeout=args.timeout)
         except asyncio.TimeoutError:
             pass
-        message = prepare_message(args)
+        message = args.payload or prepare_message(args)
         for topic in args.topic:
             logger.info('Publishing to topic: "%s"...', topic)
             client.publish(topic, payload=message, qos=args.qos, retain=args.retain, content_type='json')
@@ -261,13 +274,13 @@ async def prepare_client(args) -> MQTTClient:
     client = MQTTClient(
         args.client_id,
         clean_session=args.clean_start,
-        session_expiry_interval=args.session_expiry_interval
+        session_expiry_interval=args.session_expiry_interval,
     )
     client.on_connect = partial(on_connect, args)
     client.on_disconnect = partial(on_disconnect, args)
+    client.on_message = partial(on_message, args)
     if args.subscribe:
         client.on_subscribe = partial(on_subscribe, args)
-        client.on_message = partial(on_message, args)
     client.set_auth_credentials(username=args.username, password=args.token)
     logger.info('Connecting to %s:%s', args.host, args.port)
     await client.connect(host=args.host, port=args.port)
@@ -290,11 +303,21 @@ async def subscribe(args: argparse.Namespace):
 
 async def publish(args: argparse.Namespace):
     client = await prepare_client(args)
+    event = asyncio.Event()
+
+    loop = asyncio.get_event_loop()
+    func = partial(ask_exit, event)
+    loop.add_signal_handler(signal.SIGINT, func)
+    loop.add_signal_handler(signal.SIGTERM, func)
+
     for topic in args.topic:
         logger.info('Publish to topic: %s', topic)
-        message = prepare_message(args)
+        message = args.payload or prepare_message(args)
         client.publish(message_or_topic=topic, payload=message, qos=args.qos, retain=args.retain, content_type='json')
         logger.info('Published to topic: %s', topic)
+
+    await event.wait()
+    await client.disconnect()
 
 
 if __name__ == "__main__":

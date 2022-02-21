@@ -71,7 +71,7 @@ Publish
 Docker compose mqtt script
 ----------------------------------------------------
 
-    docker-compose exec mqtt python mqtt.py --publish --username test --private-key private.pem --client-id 3 --qos 1 --host emqx1
+    docker-compose exec mqtt python mqtt.py --publish --username test --private-key private.pem --client-id 3 --qos 2 --host emqx1
 
-    docker-compose exec mqtt python mqtt.py --subscribe --username sensorsadmin --client-id 1 --private-key private.pem --no-local --group kafka --shared --qos 1 --host emqx1
-    docker-compose exec mqtt python mqtt.py --subscribe --username sensorsadmin --client-id 2 --private-key private.pem --no-local --group kafka --shared --qos 1 --host emqx2
+    docker-compose exec mqtt python mqtt.py --subscribe --username sensorsadmin --client-id 1 --private-key private.pem --no-local --group kafka --shared --qos 2 --host emqx1
+    docker-compose exec mqtt python mqtt.py --subscribe --username sensorsadmin --client-id 2 --private-key private.pem --no-local --group kafka --shared --qos 2 --host emqx2
