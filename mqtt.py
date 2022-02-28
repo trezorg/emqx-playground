@@ -28,6 +28,10 @@ PRIVATE_KEY_FILE = 'keys/private.pem'
 DEFAULT_ORGANIZATION = 'sensors'
 DEFAULT_TTL = 3600*24*30
 MESSAGE_VERSION = '0.0.1'
+DEFAULT_QOS = 2
+DEFAULT_PORT = 1883
+DEFAULT_HOST = '127.0.0.1'
+DEFAULT_PUBLISH_PAUSE = 3
 
 
 def prepare_args():
@@ -39,14 +43,14 @@ def prepare_args():
     parser.add_argument(
         "--host",
         help="MQTT host",
-        default='127.0.0.1',
+        default=DEFAULT_HOST,
         type=str,
     )
     parser.add_argument(
         "-p",
         "--port",
         help="MQTT port",
-        default=1883,
+        default=DEFAULT_PORT,
         type=int,
     )
     parser.add_argument(
@@ -132,8 +136,14 @@ def prepare_args():
         "-q",
         "--qos",
         help="MQTT QOS",
-        default=2,
+        default=DEFAULT_QOS,
         choices=[0, 1, 2],
+        type=int,
+    )
+    publish_group.add_argument(
+        "--publish-pause",
+        help="Wait QOS 2 publish message PUBREC",
+        default=DEFAULT_PUBLISH_PAUSE,
         type=int,
     )
     publish_group.add_argument(
@@ -315,6 +325,11 @@ async def publish(args: argparse.Namespace):
         message = args.payload or prepare_message(args)
         client.publish(message_or_topic=topic, payload=message, qos=args.qos, retain=args.retain, content_type='json')
         logger.info('Published to topic: %s', topic)
+
+    if args.qos == DEFAULT_QOS:
+        logger.info('Waithing for %d seconds...', args.publish_pause)
+        await asyncio.sleep(args.publish_pause)
+        event.set()
 
     await event.wait()
     await client.disconnect()
